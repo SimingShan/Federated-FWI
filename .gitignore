@@ -1,0 +1,12 @@
+data/
+dataset/
+ray_temp/
+experiment_result/
+pretrained_model/
+*.npy
+*.pt
+*.pkl
+*.png
+*.ipynb
+__pycache__/
+.ipynb_checkpoints/

@@ -1,0 +1,48 @@
+path:
+    velocity_data_path: "dataset/combined/velocity_model"
+    client_seismic_data_path: "dataset/combined/seismic_data/density_split"
+    gt_seismic_data_path: "dataset/combined/seismic_data/gt"
+    model_path: "pretrained_model/model.pt"
+    output_path: "experiment_result/combined/"
+
+federated:
+    num_rounds: 600
+    local_epochs: 5
+    local_lr: 0.01
+
+experiment:
+    strategy: "FedAvgM"
+    regularization: "none"
+    reg_lambda: 0.0
+    server_momentum: 0.9
+    num_clients: 2
+    scenario_flag: "density_split"
+
+resources:
+    num_cpus_per_client: 1
+    num_gpus_per_client: 0.5
+
+diffusion:
+    dim: 64
+    dim_mults: [1, 2, 4, 8]
+    flash_attn: False
+    channels: 1
+    image_size: 72
+    timesteps: 1000
+    sampling_timesteps: 250
+    objective: "pred_noise"
+
+forward:
+    initial_sigma: 10
+    n_grid: 190
+    nz: 70
+    nt: 1000
+    dx: 10
+    nbc: 120
+    dt: 1e-3
+    f: 15
+    sz: 10
+    gz: 10
+    ng: 190
+    ns: 10
+    client_receiver_strides: [1, 3]
