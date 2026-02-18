@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Generate SLURM array job scripts for geo_split hyperparameter sweep.
 
-Grid (216 total):
+Grid (216 total, split evenly across two clusters):
   reg_lambda:      [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]  — 6 values
   local_lr:        [0.005, 0.01, 0.02]                — 3 values
   num_patches:     [3, 5, 7]                           — 3 values
   server_momentum: [0.6, 0.7, 0.8, 0.9]               — 4 values
+
+Split: misha gets combos 0-107 (h100_80g), bouchet gets combos 108-215 (h200).
 
 Usage:
   python scripts/sweep_geo_split.py
@@ -29,17 +31,17 @@ MODE = "federated"
 CLUSTER_HEADERS = {
     "misha": """\
 #SBATCH --partition=gpu
-#SBATCH --constraint=h200
+#SBATCH --constraint=h100_80g
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=140G
-#SBATCH --time=0-06:00:00""",
+#SBATCH --time=0-03:00:00""",
     "bouchet": """\
 #SBATCH --partition=gpu_h200
 #SBATCH --gpus=h200:1
 #SBATCH --cpus-per-gpu=2
 #SBATCH --mem=140G
-#SBATCH --time=0-06:00:00""",
+#SBATCH --time=0-03:00:00""",
 }
 
 OUTPUT_DIR = "scripts/slurm"
@@ -69,7 +71,7 @@ def generate_slurm_script(cluster, combos):
     script = f"""\
 #!/bin/bash
 #SBATCH --job-name=sweep_geo
-#SBATCH --array=0-{n_jobs - 1}%8
+#SBATCH --array=0-{n_jobs - 1}
 #SBATCH --output=logs/sweep_geo_%A_%a.out
 #SBATCH --error=logs/sweep_geo_%A_%a.err
 {header}
@@ -104,16 +106,23 @@ python main.py \\
 
 def main():
     combos = generate_combinations()
+    assert len(combos) == 216
+    half = len(combos) // 2  # 108
+
+    cluster_combos = {
+        "misha":   combos[:half],    # jobs 0–107
+        "bouchet": combos[half:],    # jobs 108–215
+    }
+
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    for cluster in CLUSTER_HEADERS:
-        script = generate_slurm_script(cluster, combos)
+    for cluster, subset in cluster_combos.items():
+        script = generate_slurm_script(cluster, subset)
         path = os.path.join(OUTPUT_DIR, f"sweep_geo_split_{cluster}.sh")
         with open(path, "w") as f:
             f.write(script)
-        # Make executable
         os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
-        print(f"Generated: {path} ({len(combos)} jobs)")
+        print(f"Generated: {path} ({len(subset)} jobs, array 0-{len(subset)-1})")
 
     # Print a sample command for dry-run verification
     c = combos[0]
