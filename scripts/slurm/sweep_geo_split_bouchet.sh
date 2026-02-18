@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=sweep_geo
-#SBATCH --array=0-215%8
+#SBATCH --array=0-215
 #SBATCH --output=logs/sweep_geo_%A_%a.out
 #SBATCH --error=logs/sweep_geo_%A_%a.err
 #SBATCH --partition=gpu_h200

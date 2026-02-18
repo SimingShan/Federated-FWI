@@ -4,16 +4,16 @@ from tqdm.auto import tqdm
 from src.regularization.base import RegularizationMethod
 from src.utils.data_trans import add_noise_to_seismic, missing_trace
 from src.utils.pytorch_ssim import SSIM
-from src.core.metrices import MetricsCalculator
+from src.core.metrics import MetricsCalculator
 from src.core.losses import LossCalculator
 
 
 class InversionEngine:
 
-    def __init__(self, diffusion_model, ssim_loss: SSIM, regularization: str, num_patches: int = None):
+    def __init__(self, diffusion_model, ssim_loss: SSIM, regularization: str, num_patches: int = None, device: torch.device = None):
         self.diffusion_model = diffusion_model
         self.ssim_loss = ssim_loss
-        self.device = diffusion_model.device
+        self.device = diffusion_model.device if diffusion_model is not None else (device or torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         self.regularization_method = RegularizationMethod(regularization, diffusion_model, num_patches=num_patches)
 
     def optimize(self, mu: torch.Tensor, mu_true: torch.Tensor, y: torch.Tensor,
@@ -51,7 +51,7 @@ class InversionEngine:
         mask = mask.to(self.device)
 
         pbar = tqdm(range(ts), desc='Optimizing', unit='step')
-        for step in pbar:
+        for _ in pbar:
 
             if self.regularization_method.regularization_type == 'diffusion':
                 noise_x0 = torch.randn(mu.shape, device=mu.device, dtype=mu.dtype)

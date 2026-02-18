@@ -2,7 +2,7 @@ import torch
 from flwr.common import NDArrays
 from src.regularization.base import RegularizationMethod
 from src.core.losses import LossCalculator
-from src.core.metrices import MetricsCalculator
+from src.core.metrics import MetricsCalculator
 from src.federated_learning.flwr_utils import ndarrays_to_tensor
 
 def get_evaluate_fn(
@@ -18,20 +18,18 @@ def get_evaluate_fn(
     batch_labels=None,
 ):
 
-    def evaluate(server_round: int, parameters: NDArrays, server_config):
-        regularization = config.experiment.regularization
-        reg_lambda = config.experiment.reg_lambda
-        num_patches = getattr(config.experiment, 'num_patches', None)
-        regularization_method = RegularizationMethod(regularization, diffusion_model, num_patches=num_patches)
-        loss_calc = LossCalculator(regularization_method)
-        metrics_calc = MetricsCalculator(ssim_loss)
-        assert config is not None, "Config must be provided for evaluation."
+    assert config is not None, "Config must be provided for evaluation."
+    reg_lambda = config.experiment.reg_lambda
+    regularization_method = RegularizationMethod(
+        config.experiment.regularization, diffusion_model,
+        num_patches=getattr(config.experiment, 'num_patches', None)
+    )
+    loss_calc = LossCalculator(regularization_method)
+    metrics_calc = MetricsCalculator(ssim_loss)
 
+    def evaluate(server_round: int, parameters: NDArrays, _):
         if server_round == total_rounds:
-            print(f"Server evaluation: Capturing final model parameters at round {server_round}.")
             final_params_store["final_model"] = parameters
-        elif server_round % 10 == 0:
-            final_params_store[f"model_round_{server_round}"] = parameters
 
         model = ndarrays_to_tensor(parameters, device)
 
@@ -52,12 +50,11 @@ def get_evaluate_fn(
 
         # Per-model metrics when running in batched mode
         if batch_labels is not None:
-            for idx, (fam, inst) in enumerate(batch_labels):
-                metrics[f'mae_{fam}_{inst}'] = mae[idx].item()
-                metrics[f'rmse_{fam}_{inst}'] = rmse[idx].item()
-                metrics[f'ssim_{fam}_{inst}'] = ssim_val[idx].item()
+            for idx, fam in enumerate(batch_labels):
+                metrics[f'mae_{fam}'] = mae[idx].item()
+                metrics[f'rmse_{fam}'] = rmse[idx].item()
+                metrics[f'ssim_{fam}'] = ssim_val[idx].item()
 
         return total_loss.mean().item(), metrics
 
-    evaluate.__annotations__['parameters'] = NDArrays
     return evaluate

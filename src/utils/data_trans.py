@@ -1,6 +1,15 @@
+import random
 import torch
 import numpy as np
 from scipy.ndimage import gaussian_filter
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
 
 def v_normalize(v):
     """Normalize velocity values to [-1, 1]"""

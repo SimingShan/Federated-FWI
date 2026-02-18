@@ -3,7 +3,13 @@ import os
 from omegaconf import OmegaConf
 from src.run_federated import run_full_experiment
 from src.run_centralized import run_centralized
+from src.utils.data_trans import set_seed
 if __name__ == "__main__":
+    set_seed(42)
+    import torch
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.set_float32_matmul_precision("high")
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run Federated Waveform Inversion experiments.")
 
@@ -57,48 +63,16 @@ if __name__ == "__main__":
         config = OmegaConf.merge(config, cli_conf)
         print(f"Applied CLI overrides: {overrides}")
 
-    target_families_env = os.environ.get("RFL_TARGET_FAMILIES")
-    target_instances_env = os.environ.get("RFL_TARGET_INSTANCES")
-
     # Order must match scripts/create_combined_dataset.py FAMILIES list
     COMBINED_FAMILIES = ['foothill', 'marmousi', 'overthrust', 'bpsalt']
 
-    if args.family == 'combined':
-        families_to_run = COMBINED_FAMILIES
-    else:
-        families_to_run = [args.family]
+    families_to_run = COMBINED_FAMILIES if args.family == 'combined' else [args.family]
 
     if args.mode == 'federated':
-        resolved_target_instances = (
-            [int(x) for x in target_instances_env.split(',')]
-            if target_instances_env else None
+        run_full_experiment(
+            config_override=config,
+            target_families=families_to_run,
         )
-
-        if args.family == 'combined':
-            # Batched mode: one FL simulation for all families
-            run_full_experiment(
-                config_override=config,
-                target_families=families_to_run,
-                target_instances=resolved_target_instances,
-                batched=True,
-            )
-        else:
-            # Single-family: sequential mode (one simulation per family)
-            for fam in families_to_run:
-                fam_config = OmegaConf.merge(config, OmegaConf.create({
-                    "path": {
-                        "velocity_data_path": f"dataset/{fam}/velocity_model",
-                        "client_seismic_data_path": f"dataset/{fam}/seismic_data/{config.experiment.scenario_flag}",
-                        "gt_seismic_data_path": f"dataset/{fam}/seismic_data/gt",
-                        "output_path": f"experiment_result/{fam}/",
-                    }
-                }))
-
-                run_full_experiment(
-                    config_override=fam_config,
-                    target_families=[fam],
-                    target_instances=resolved_target_instances,
-                )
 
     elif args.mode == 'centralized':
         for fam in families_to_run:
