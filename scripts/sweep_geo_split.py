@@ -44,6 +44,18 @@ CLUSTER_HEADERS = {
 #SBATCH --time=0-03:00:00""",
 }
 
+# --- Cluster-specific runtime environment (chdir + conda setup) ---
+CLUSTER_ENV = {
+    "misha": {
+        "chdir": "/gpfs/radev/home/ss5235/scratch/Federated-FWI",
+        "setup": "module reset\nmodule load miniconda\nconda activate /gpfs/radev/home/ss5235/.conda/envs/fwi",
+    },
+    "bouchet": {
+        "chdir": "/home/ss5235/scratch_pi_ll2247/ss5235/Federated-FWI",
+        "setup": "module reset\nmodule load miniconda\nconda activate /home/ss5235/project_pi_ll2247/ss5235/conda_envs/fwi",
+    },
+}
+
 OUTPUT_DIR = "scripts/slurm"
 
 
@@ -105,6 +117,64 @@ python main.py \\
     return script
 
 
+def generate_submit_script(cluster, combos):
+    """Generate a login-node bash script that submits each combo as an individual sbatch job.
+    Each job gets its own priority score and ages independently — better for backfill scheduling.
+    Run with: bash scripts/slurm/submit_jobs_{cluster}.sh
+    """
+    rl_arr, lr_arr, np_arr, sm_arr = make_bash_arrays(combos)
+    n_jobs = len(combos)
+    header = CLUSTER_HEADERS[cluster]
+    env = CLUSTER_ENV[cluster]
+    chdir = env["chdir"]
+    setup = env["setup"]
+
+    script = f"""\
+#!/bin/bash
+# Submits {n_jobs} individual jobs for geo_split sweep on {cluster}.
+# Run on the login node: bash scripts/slurm/submit_jobs_{cluster}.sh
+
+REG_LAMBDAS=({rl_arr})
+LOCAL_LRS=({lr_arr})
+NUM_PATCHES=({np_arr})
+SERVER_MOMENTUMS=({sm_arr})
+
+mkdir -p {chdir}/logs
+
+for IDX in $(seq 0 {n_jobs - 1}); do
+    RL=${{REG_LAMBDAS[$IDX]}}
+    LR=${{LOCAL_LRS[$IDX]}}
+    NP=${{NUM_PATCHES[$IDX]}}
+    SM=${{SERVER_MOMENTUMS[$IDX]}}
+
+    sbatch << EOF
+#!/bin/bash
+#SBATCH --job-name=sg_rl${{RL}}_lr${{LR}}_np${{NP}}_sm${{SM}}
+#SBATCH --output={chdir}/logs/sweep_rl${{RL}}_lr${{LR}}_np${{NP}}_sm${{SM}}.out
+#SBATCH --error={chdir}/logs/sweep_rl${{RL}}_lr${{LR}}_np${{NP}}_sm${{SM}}.err
+#SBATCH --chdir={chdir}
+{header}
+
+{setup}
+
+python main.py \\\\
+    --config_path {CONFIG_PATH} \\\\
+    --family {FAMILY} \\\\
+    --mode {MODE} \\\\
+    experiment.reg_lambda=${{RL}} \\\\
+    federated.local_lr=${{LR}} \\\\
+    experiment.num_patches=${{NP}} \\\\
+    experiment.server_momentum=${{SM}}
+EOF
+
+    echo "Submitted IDX=$IDX: rl=$RL lr=$LR np=$NP sm=$SM"
+done
+
+echo "Done — {n_jobs} jobs submitted to {cluster}."
+"""
+    return script
+
+
 def main():
     combos = generate_combinations()
     assert len(combos) == 216
@@ -118,12 +188,21 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     for cluster, subset in cluster_combos.items():
+        # Array script (one job, N tasks)
         script = generate_slurm_script(cluster, subset)
         path = os.path.join(OUTPUT_DIR, f"sweep_geo_split_{cluster}.sh")
         with open(path, "w") as f:
             f.write(script)
         os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
-        print(f"Generated: {path} ({len(subset)} jobs, array 0-{len(subset)-1})")
+        print(f"Generated: {path} ({len(subset)} array tasks)")
+
+        # Submit script (N independent jobs)
+        submit = generate_submit_script(cluster, subset)
+        submit_path = os.path.join(OUTPUT_DIR, f"submit_jobs_{cluster}.sh")
+        with open(submit_path, "w") as f:
+            f.write(submit)
+        os.chmod(submit_path, os.stat(submit_path).st_mode | stat.S_IEXEC)
+        print(f"Generated: {submit_path} ({len(subset)} individual jobs)")
 
     # Print a sample command for dry-run verification
     c = combos[0]
