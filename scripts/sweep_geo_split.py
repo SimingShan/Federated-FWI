@@ -74,6 +74,7 @@ def generate_slurm_script(cluster, combos):
 #SBATCH --array=0-{n_jobs - 1}
 #SBATCH --output=logs/sweep_geo_%A_%a.out
 #SBATCH --error=logs/sweep_geo_%A_%a.err
+#SBATCH --chdir=/home/shansiming/project/Federated-FWI
 {header}
 
 # --- Parameter arrays (indexed by SLURM_ARRAY_TASK_ID) ---

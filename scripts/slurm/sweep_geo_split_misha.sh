@@ -4,7 +4,7 @@
 #SBATCH --output=logs/sweep_geo_%A_%a.out
 #SBATCH --error=logs/sweep_geo_%A_%a.err
 #SBATCH --partition=gpu
-#SBATCH --constraint=h100
+#SBATCH --constraint=h100_80g
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=80G
